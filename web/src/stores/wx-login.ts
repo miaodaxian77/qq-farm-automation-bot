@@ -18,7 +18,7 @@ export const useWxLoginStore = defineStore('wx-login', () => {
     enabled: true,
     apiBase: 'http://127.0.0.1:8059/api',
     apiKey: '',
-    proxyApiUrl: 'https://api.aineishe.com/api/wxnc',
+    proxyApiUrl: 'http://127.0.0.1:8059/api',
     appId: 'wx5306c5978fdb76e4',
     autoAddAccount: true,
     userIsolation: true,

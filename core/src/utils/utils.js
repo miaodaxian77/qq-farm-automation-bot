@@ -137,9 +137,16 @@ function sleep(ms) {
     return new Promise(r => setTimeout(r, ms));
 }
 
+function randomDelay(minMs, maxMs) {
+    const min = Math.max(0, Math.floor(minMs) || 0);
+    const max = Math.max(min, Math.floor(maxMs) || min);
+    const delay = min + Math.floor(Math.random() * (max - min + 1));
+    return new Promise(r => setTimeout(r, delay));
+}
+
 module.exports = {
     toLong, toNum, now,
     setLogHook,
     getServerTimeSec, syncServerTime, toTimeSec,
-    log, logWarn, sleep,
+    log, logWarn, sleep, randomDelay,
 };

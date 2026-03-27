@@ -461,7 +461,7 @@ function startAdminServer(dataProvider) {
     });
 
     app.use('/api', (req, res, next) => {
-        if (req.path === '/login' || req.path === '/qr/create' || req.path === '/qr/check' || req.path === '/proxy') return next();
+        if (req.path === '/login' || req.path === '/qr/create' || req.path === '/qr/check' || req.path === '/proxy' || req.path === '/card-claim/status' || req.path === '/card-claim/claim' || req.path === '/game-version') return next();
         return authRequired(req, res, next);
     });
 
@@ -469,6 +469,11 @@ function startAdminServer(dataProvider) {
 
     app.get('/api/ping', (req, res) => {
         res.json({ ok: true, data: { ok: true, uptime: process.uptime(), version } });
+    });
+
+    app.get('/api/game-version', (req, res) => {
+        const runtimeConfig = getRuntimeConfig();
+        res.json({ ok: true, clientVersion: runtimeConfig.clientVersion });
     });
 
     app.get('/api/auth/validate', (req, res) => {
@@ -1193,6 +1198,65 @@ function startAdminServer(dataProvider) {
         }
     });
 
+    // API: 批量添加蔬菜黑名单
+    app.post('/api/plant-blacklist/batch', authRequired, (req, res) => {
+        try {
+            const accountId = getAccId(req);
+            if (!accountId) return res.status(400).json({ ok: false, error: 'Missing accountId' });
+
+            // 检查权限
+            if (!checkAccountAccess(req, accountId)) {
+                return res.status(403).json({ ok: false, error: '无权访问此账号' });
+            }
+
+            const seedIds = (req.body || {}).seedIds || [];
+            if (!Array.isArray(seedIds)) {
+                return res.status(400).json({ ok: false, error: 'seedIds must be an array' });
+            }
+
+            const current = store.getPlantBlacklist ? store.getPlantBlacklist(accountId) : [];
+            const merged = [...new Set([...current, ...seedIds.map(Number).filter(n => Number.isFinite(n) && n > 0)])];
+
+            if (store.setPlantBlacklist) {
+                store.setPlantBlacklist(accountId, merged);
+            }
+
+            if (provider && typeof provider.broadcastConfig === 'function') {
+                provider.broadcastConfig(accountId);
+            }
+
+            const saved = store.getPlantBlacklist ? store.getPlantBlacklist(accountId) : [];
+            res.json({ ok: true, data: saved });
+        } catch (e) {
+            handleApiError(res, e);
+        }
+    });
+
+    // API: 清空蔬菜黑名单
+    app.delete('/api/plant-blacklist', authRequired, (req, res) => {
+        try {
+            const accountId = getAccId(req);
+            if (!accountId) return res.status(400).json({ ok: false, error: 'Missing accountId' });
+
+            // 检查权限
+            if (!checkAccountAccess(req, accountId)) {
+                return res.status(403).json({ ok: false, error: '无权访问此账号' });
+            }
+
+            if (store.setPlantBlacklist) {
+                store.setPlantBlacklist(accountId, []);
+            }
+
+            if (provider && typeof provider.broadcastConfig === 'function') {
+                provider.broadcastConfig(accountId);
+            }
+
+            res.json({ ok: true, data: [] });
+        } catch (e) {
+            handleApiError(res, e);
+        }
+    });
+
     // API: 种子列表
     app.get('/api/seeds', async (req, res) => {
         const id = getAccId(req);
@@ -1495,25 +1559,24 @@ function startAdminServer(dataProvider) {
             }
 
             // 直接从主进程的 store 读取，确保即使账号未运行也能获取配置
-            const intervals = store.getIntervals(id);
-            const strategy = store.getPlantingStrategy(id);
-            const preferredSeed = store.getPreferredSeed(id);
-            const friendQuietHours = store.getFriendQuietHours(id);
-            const automation = store.getAutomation(id);
-            const stealDelaySeconds = (typeof store.getStealDelaySeconds === 'function') ? store.getStealDelaySeconds(id) : 0;
-            const plantOrderRandom = (typeof store.getPlantOrderRandom === 'function') ? store.getPlantOrderRandom(id) : false;
-            const plantDelaySeconds = (typeof store.getPlantDelaySeconds === 'function') ? store.getPlantDelaySeconds(id) : 0;
-            const fastHarvestAdvanceMs = (typeof store.getFastHarvestAdvanceMs === 'function') ? store.getFastHarvestAdvanceMs(id) : 200;
-            const fertilizerBuyType = (typeof store.getFertilizerBuyType === 'function') ? store.getFertilizerBuyType(id) : 'organic';
-            const fertilizerBuyCount = (typeof store.getFertilizerBuyCount === 'function') ? store.getFertilizerBuyCount(id) : 0;
-            const bagSeedPriority = (typeof store.getBagSeedPriority === 'function') ? store.getBagSeedPriority(id) : [];
-            const bagSeedFallbackStrategy = (typeof store.getBagSeedFallbackStrategy === 'function') ? store.getBagSeedFallbackStrategy(id) : 'level';
+            const intervals = id ? store.getIntervals(id) : {};
+            const strategy = id ? store.getPlantingStrategy(id) : null;
+            const preferredSeed = id ? store.getPreferredSeed(id) : null;
+            const friendQuietHours = id ? store.getFriendQuietHours(id) : null;
+            const automation = id ? store.getAutomation(id) : {};
+            const stealDelaySeconds = id && (typeof store.getStealDelaySeconds === 'function') ? store.getStealDelaySeconds(id) : 0;
+            const plantOrderRandom = id && (typeof store.getPlantOrderRandom === 'function') ? store.getPlantOrderRandom(id) : false;
+            const plantDelaySeconds = id && (typeof store.getPlantDelaySeconds === 'function') ? store.getPlantDelaySeconds(id) : 0;
+            const fertilizerBuyType = id && (typeof store.getFertilizerBuyType === 'function') ? store.getFertilizerBuyType(id) : 'organic';
+            const fertilizerBuyCount = id && (typeof store.getFertilizerBuyCount === 'function') ? store.getFertilizerBuyCount(id) : 0;
+            const bagSeedPriority = id && (typeof store.getBagSeedPriority === 'function') ? store.getBagSeedPriority(id) : [];
+            const bagSeedFallbackStrategy = id && (typeof store.getBagSeedFallbackStrategy === 'function') ? store.getBagSeedFallbackStrategy(id) : 'level';
             const ui = store.getUI();
             // 获取用户隔离的下线提醒配置
             const offlineReminder = store.getOfflineReminder && currentUser
                 ? store.getOfflineReminder(currentUser.username)
                 : { channel: 'webhook', reloginUrlMode: 'none', endpoint: '', token: '', title: '账号下线提醒', msg: '账号下线', offlineDeleteSec: 0 };
-            res.json({ ok: true, data: { intervals, strategy, preferredSeed, friendQuietHours, automation, stealDelaySeconds, plantOrderRandom, plantDelaySeconds, fastHarvestAdvanceMs, fertilizerBuyType, fertilizerBuyCount, bagSeedPriority, bagSeedFallbackStrategy, ui, offlineReminder } });
+            res.json({ ok: true, data: { intervals, strategy, preferredSeed, friendQuietHours, automation, stealDelaySeconds, plantOrderRandom, plantDelaySeconds, fertilizerBuyType, fertilizerBuyCount, bagSeedPriority, bagSeedFallbackStrategy, ui, offlineReminder } });
         } catch (e) {
             res.status(500).json({ ok: false, error: e.message });
         }
@@ -1727,6 +1790,68 @@ function startAdminServer(dataProvider) {
                 return res.status(404).json({ ok: false, error: '卡密不存在' });
             }
             res.json({ ok: true });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    // ============ 卡密领取功能 API ============
+    // 获取卡密领取功能状态
+    app.get('/api/card-claim/status', (req, res) => {
+        try {
+            const status = userStore.getCardClaimStatus();
+            res.json({ ok: true, enabled: status.enabled });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    // 设置卡密领取功能状态（仅管理员）
+    app.post('/api/admin/card-claim/status', authRequired, adminRequired, (req, res) => {
+        try {
+            const { enabled } = req.body;
+            const status = userStore.setCardClaimStatus(enabled);
+            res.json({ ok: true, enabled: status.enabled });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    // 用户领取卡密
+    app.post('/api/card-claim/claim', (req, res) => {
+        try {
+            const ua = req.headers['user-agent'] || '';
+            const username = req.body?.username || null;
+            
+            // 清理过期记录
+            userStore.clearExpiredClaimRecords();
+            
+            const result = userStore.claimCardByUA(ua, username);
+            
+            if (!result.ok) {
+                const response = { ok: false, error: result.error };
+                if (result.remainingMs) {
+                    response.remainingMs = result.remainingMs;
+                }
+                return res.status(400).json(response);
+            }
+            
+            res.json({
+                ok: true,
+                cardCode: result.cardCode,
+                days: result.days,
+                description: result.description
+            });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    // 获取卡密领取记录（仅管理员）
+    app.get('/api/admin/card-claim/records', authRequired, adminRequired, (req, res) => {
+        try {
+            const records = userStore.getCardClaimRecords();
+            res.json({ ok: true, data: records });
         } catch (e) {
             res.status(500).json({ ok: false, error: e.message });
         }
@@ -2257,7 +2382,7 @@ function startAdminServer(dataProvider) {
 
         // 从请求头或配置中获取 API 配置
         // 优先使用请求头中的配置（前端传入）
-        const apiUrl = req.headers['x-proxy-api-url'] || process.env.WX_PROXY_API_URL || 'https://api.aineishe.com/api/wxnc';
+        const apiUrl = req.headers['x-proxy-api-url'] || process.env.WX_PROXY_API_URL || 'http://127.0.0.1:8059/api';
         const apiKey = req.headers['x-proxy-api-key'] || process.env.WX_PROXY_API_KEY || '';
         const appId = req.headers['x-proxy-app-id'] || process.env.WX_PROXY_APP_ID || 'wx5306c5978fdb76e4';
 

@@ -136,24 +136,23 @@ const DEFAULT_ACCOUNT_CONFIG = {
         fertilizer_land_types: [...DEFAULT_FERTILIZER_LAND_TYPES],
         fertilizer_smart_seconds: 300,
         skip_own_weed_bug: true,  // 不除自己草虫
-        fast_harvest: false,  // 秒收取开关
     },
     plantingStrategy: 'max_exp',
     preferredSeedId: 0,
     intervals: {
         farm: 2,
-        farmMin: 5,
-        farmMax: 10,
+        farmMin: 20,
+        farmMax: 25,
         // 好友巡查：帮助和偷菜各自独立的间隔
-        helpMin: 10,
-        helpMax: 15,
-        stealMin: 10,
-        stealMax: 15,
+        helpMin: 20,
+        helpMax: 25,
+        stealMin: 20,
+        stealMax: 25,
     },
     friendQuietHours: {
         enabled: false,
-        start: '23:00',
-        end: '07:00',
+        start: '01:00',
+        end: '07:30',
     },
     knownFriendGids: [],
     knownFriendGidSyncCooldownSec: DEFAULT_KNOWN_FRIEND_GID_SYNC_COOLDOWN_SEC,
@@ -174,8 +173,6 @@ const DEFAULT_ACCOUNT_CONFIG = {
     plantOrderRandom: true,
     // 自己农田种植时每块地间隔秒数（0=使用默认50ms）
     plantDelaySeconds: 2,
-    // 秒收取提前时间（毫秒），默认提前200ms发起请求
-    fastHarvestAdvanceMs: 200,
     // 化肥购买类型：organic（有机）或 normal（无机）
     fertilizerBuyType: 'normal',
     // 化肥购买数量（0=不限制，购买到点券不足为止）
@@ -320,7 +317,6 @@ function cloneAccountConfig(base = DEFAULT_ACCOUNT_CONFIG) {
         stealDelaySeconds: Math.max(0, Math.min(300, Number(base.stealDelaySeconds) || 0)),
         plantOrderRandom: !!(base.plantOrderRandom),
         plantDelaySeconds: Math.max(0, Math.min(60, Number(base.plantDelaySeconds) || 0)),
-        fastHarvestAdvanceMs: Math.max(50, Math.min(1000, Number(base.fastHarvestAdvanceMs) || 200)),
         fertilizerBuyType,
         fertilizerBuyCount: Math.max(0, Math.min(10000, Number(base.fertilizerBuyCount) || 0)),
         bagSeedPriority: normalizeBagSeedPriority(base.bagSeedPriority),
@@ -415,11 +411,6 @@ function normalizeAccountConfig(input, fallback = accountFallbackConfig) {
     // 种植延迟
     if (src.plantDelaySeconds !== undefined && src.plantDelaySeconds !== null) {
         cfg.plantDelaySeconds = Math.max(0, Math.min(60, Number(src.plantDelaySeconds) || 0));
-    }
-
-    // 秒收取提前时间
-    if (src.fastHarvestAdvanceMs !== undefined && src.fastHarvestAdvanceMs !== null) {
-        cfg.fastHarvestAdvanceMs = Math.max(50, Math.min(1000, Number(src.fastHarvestAdvanceMs) || 200));
     }
 
     // 化肥购买类型
@@ -565,7 +556,7 @@ function loadGlobalConfig() {
                     enabled: data.globalWxConfig.enabled !== false,
                     apiBase: String(data.globalWxConfig.apiBase || 'http://127.0.0.1:8059/api').trim(),
                     apiKey: String(data.globalWxConfig.apiKey || '').trim(),
-                    proxyApiUrl: String(data.globalWxConfig.proxyApiUrl || 'https://api.aineishe.com/api/wxnc').trim(),
+                    proxyApiUrl: String(data.globalWxConfig.proxyApiUrl || 'http://127.0.0.1:8059/api').trim(),
                     appId: String(data.globalWxConfig.appId || 'wx5306c5978fdb76e4').trim(),
                     autoAddAccount: data.globalWxConfig.autoAddAccount !== false,
                     userIsolation: data.globalWxConfig.userIsolation !== false,
@@ -941,11 +932,6 @@ function getPlantDelaySeconds(accountId) {
     return Math.max(0, Math.min(60, Number(getAccountConfigSnapshot(accountId).plantDelaySeconds) || 0));
 }
 
-// ============ 秒收取提前时间 ============
-function getFastHarvestAdvanceMs(accountId) {
-    return Math.max(50, Math.min(1000, Number(getAccountConfigSnapshot(accountId).fastHarvestAdvanceMs) || 200));
-}
-
 // ============ 化肥购买类型 ============
 function getFertilizerBuyType(accountId) {
     const cfg = getAccountConfigSnapshot(accountId);
@@ -1190,7 +1176,7 @@ const DEFAULT_WX_CONFIG = {
     enabled: true,
     apiBase: 'http://127.0.0.1:8059/api',
     apiKey: '',
-    proxyApiUrl: 'https://api.aineishe.com/api/wxnc',
+    proxyApiUrl: 'http://127.0.0.1:8059/api',
     appId: 'wx5306c5978fdb76e4',
     autoAddAccount: true,
     userIsolation: true,
@@ -1215,17 +1201,6 @@ function setGlobalWxConfig(config) {
     return { ...globalConfig.globalWxConfig };
 }
 
-function getFastHarvestConfig(accountId) {
-    const cfg = getAccountConfigSnapshot(accountId);
-    const automation = cfg.automation || {};
-    return {
-        enabled: !!automation.fast_harvest,
-        advanceMs: Math.max(50, Math.min(1000, Number(cfg.fastHarvestAdvanceMs) || 200)),
-        fertilizerStrategy: automation.fertilizer || 'none',
-        fertilizerSmartSeconds: Math.max(30, Math.min(3600, Number(automation.fertilizer_smart_seconds) || 300)),
-    };
-}
-
 module.exports = {
     getConfigSnapshot,
     applyConfigSnapshot,
@@ -1248,7 +1223,6 @@ module.exports = {
     getStealDelaySeconds,
     getPlantOrderRandom,
     getPlantDelaySeconds,
-    getFastHarvestAdvanceMs,
     getFertilizerBuyType,
     getFertilizerBuyCount,
     getUI,
@@ -1283,6 +1257,4 @@ module.exports = {
     getGlobalWxConfig,
     setGlobalWxConfig,
     DEFAULT_WX_CONFIG,
-    // 秒收取配置
-    getFastHarvestConfig,
 };

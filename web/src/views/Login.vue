@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { onMounted, ref, computed, watch } from 'vue'
+import api from '@/api'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import { useUserStore } from '@/stores/user'
 
+declare const __APP_VERSION__: string
+
 const userStore = useUserStore()
+const appVersion = __APP_VERSION__
+const gameVersion = ref('')
 
 const isLogin = ref(true)
 const username = ref('')
@@ -16,6 +21,9 @@ const loading = ref(false)
 const showPasswordStrength = ref(false)
 const lockoutRemaining = ref(0)
 const rateLimitRemaining = ref(0)
+
+const cardClaimEnabled = ref(false)
+const cardClaimLoading = ref(false)
 
 const passwordStrength = computed(() => {
   const pwd = password.value
@@ -181,6 +189,65 @@ function toggleMode() {
   lockoutRemaining.value = 0
   rateLimitRemaining.value = 0
 }
+
+async function checkCardClaimStatus() {
+  try {
+    const res = await api.get('/api/card-claim/status')
+    if (res.data.ok) {
+      cardClaimEnabled.value = res.data.enabled === true
+    }
+  }
+  catch (e) {
+    console.error('检查卡密领取状态失败:', e)
+  }
+}
+
+async function claimFreeCard() {
+  if (cardClaimLoading.value)
+    return
+  
+  cardClaimLoading.value = true
+  error.value = ''
+  
+  try {
+    const res = await api.post('/api/card-claim/claim')
+    
+    if (res.data.ok) {
+      cardCode.value = res.data.cardCode
+      success.value = `🎉 成功领取 ${res.data.days} 天卡密！已自动填入卡密输入框`
+      setTimeout(() => {
+        success.value = ''
+      }, 3000)
+    }
+    else {
+      error.value = res.data.error || '领取失败'
+    }
+  }
+  catch (e: any) {
+    const data = e.response?.data
+    error.value = data?.error || e.message || '领取失败'
+  }
+  finally {
+    cardClaimLoading.value = false
+  }
+}
+
+onMounted(() => {
+  checkCardClaimStatus()
+  fetchGameVersion()
+})
+
+async function fetchGameVersion() {
+  try {
+    const res = await api.get('/api/game-version')
+    if (res.data.ok) {
+      gameVersion.value = res.data.clientVersion
+    }
+  }
+  catch (e) {
+    console.error('获取游戏版本失败:', e)
+  }
+}
 </script>
 
 <template>
@@ -283,6 +350,19 @@ function toggleMode() {
             <span class="label-icon">🎫</span>
             卡密
           </label>
+          
+          <div v-if="cardClaimEnabled" class="mb-2">
+            <button
+              type="button"
+              class="claim-card-btn"
+              :disabled="cardClaimLoading"
+              @click="claimFreeCard"
+            >
+              <span v-if="cardClaimLoading" class="i-svg-spinners-90-ring-with-bg" />
+              <span v-else>🎁 免费领取卡密</span>
+            </button>
+          </div>
+          
           <BaseInput
             id="cardCode"
             v-model="cardCode"
@@ -339,7 +419,7 @@ function toggleMode() {
       <div class="card-footer">
         <span>🌻 愿你的农场丰收满满 🌻</span>
         <div class="footer-info">
-          <span class="version">v2.1.7</span>
+          <span class="version">v{{ appVersion }}</span>
           <span class="separator">|</span>
           <a
             href="https://github.com/XyhTender/qq-farm-automation-bot"
@@ -349,6 +429,9 @@ function toggleMode() {
           >
             GitHub
           </a>
+        </div>
+        <div v-if="gameVersion" class="game-version">
+          当前游戏版本：{{ gameVersion }}
         </div>
       </div>
     </div>
@@ -823,6 +906,40 @@ function toggleMode() {
 .github-link:hover {
   color: #43a047;
   text-decoration: underline;
+}
+
+.game-version {
+  margin-top: 8px;
+  font-size: 0.7rem;
+  color: #81c784;
+  text-align: center;
+}
+
+.claim-card-btn {
+  width: 100%;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #7cb342 0%, #558b2f 100%);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.claim-card-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(124, 179, 66, 0.3);
+}
+
+.claim-card-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* 暗色模式适配 */

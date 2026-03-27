@@ -64,6 +64,14 @@ const searchQuery = ref('')
 const filterStatus = ref<'all' | 'used' | 'unused' | 'enabled' | 'disabled'>('all')
 const cardTypeFilter = ref<'all' | 'time' | 'quota'>('all')
 
+// 卡密领取功能
+const cardClaimEnabled = ref(false)
+const cardClaimLoading = ref(false)
+
+const unusedTimeCardsCount = computed(() => {
+  return cards.value.filter(c => c.type === 'time' && !c.usedBy && c.enabled).length
+})
+
 const filteredCards = computed(() => {
   let result = cards.value
 
@@ -114,6 +122,41 @@ async function fetchCards() {
   }
   finally {
     cardsLoading.value = false
+  }
+}
+
+async function fetchCardClaimStatus() {
+  cardClaimLoading.value = true
+  try {
+    const res = await api.get('/api/card-claim/status')
+    if (res.data.ok) {
+      cardClaimEnabled.value = res.data.enabled
+    }
+  }
+  catch (e: any) {
+    console.error('获取卡密领取状态失败:', e)
+  }
+  finally {
+    cardClaimLoading.value = false
+  }
+}
+
+async function toggleCardClaimStatus(enabled: boolean | undefined) {
+  if (enabled === undefined) return
+  cardClaimLoading.value = true
+  try {
+    const res = await api.post('/api/admin/card-claim/status', { enabled })
+    if (res.data.ok) {
+      cardClaimEnabled.value = res.data.enabled
+      toast.success(enabled ? '卡密领取功能已开启' : '卡密领取功能已关闭')
+    }
+  }
+  catch (e: any) {
+    toast.error(e.message || '操作失败')
+    cardClaimEnabled.value = !enabled
+  }
+  finally {
+    cardClaimLoading.value = false
   }
 }
 
@@ -594,14 +637,14 @@ const systemConfigLoading = ref(false)
 
 const localSystemConfig = ref({
   serverUrl: 'wss://gate-obt.nqf.qq.com/prod/ws',
-  clientVersion: '1.7.0.6_20260313',
+  clientVersion: '1.7.0.7_20260313',
   platform: 'qq',
   os: 'iOS',
 })
 
 const defaultSystemConfig = ref({
   serverUrl: 'wss://gate-obt.nqf.qq.com/prod/ws',
-  clientVersion: '1.7.0.6_20260313',
+  clientVersion: '1.7.0.7_20260313',
   platform: 'qq',
   os: 'iOS',
 })
@@ -612,7 +655,7 @@ const localWxConfig = ref({
   enabled: true,
   apiBase: 'http://127.0.0.1:8059/api',
   apiKey: '',
-  proxyApiUrl: 'https://api.aineishe.com/api/wxnc',
+  proxyApiUrl: 'http://127.0.0.1:8059/api',
   appId: 'wx5306c5978fdb76e4',
   autoAddAccount: true,
   userIsolation: true,
@@ -664,7 +707,7 @@ async function handleResetWxConfig() {
     enabled: true,
     apiBase: 'http://127.0.0.1:8059/api',
     apiKey: '',
-    proxyApiUrl: 'https://api.aineishe.com/api/wxnc',
+    proxyApiUrl: 'http://127.0.0.1:8059/api',
     appId: 'wx5306c5978fdb76e4',
     autoAddAccount: true,
     userIsolation: true,
@@ -738,6 +781,7 @@ onMounted(() => {
   fetchLoginLogs()
   loadSystemConfig()
   loadWxConfig()
+  fetchCardClaimStatus()
 })
 </script>
 
@@ -783,6 +827,28 @@ onMounted(() => {
               <BaseButton variant="primary" size="sm" @click="showCreateModal = true">
                 创建卡密
               </BaseButton>
+            </div>
+          </div>
+
+          <!-- 卡密领取功能开关 -->
+          <div class="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+            <div>
+              <h4 class="text-sm text-gray-900 font-medium dark:text-white">
+                卡密领取功能
+              </h4>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                开启后，用户注册时可免费领取一张时间卡密
+              </p>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="text-xs text-gray-500">
+                库存: <span class="font-medium" :class="unusedTimeCardsCount > 0 ? 'text-green-600' : 'text-red-600'">{{ unusedTimeCardsCount }}</span> 张
+              </span>
+              <BaseSwitch
+                v-model="cardClaimEnabled"
+                :disabled="cardClaimLoading"
+                @update:model-value="toggleCardClaimStatus"
+              />
             </div>
           </div>
 
@@ -895,6 +961,12 @@ onMounted(() => {
                     <th class="px-4 py-2 text-left text-xs text-gray-500 font-medium dark:text-gray-300">
                       使用者
                     </th>
+                    <th class="px-4 py-2 text-left text-xs text-gray-500 font-medium dark:text-gray-300">
+                      生成时间
+                    </th>
+                    <th class="px-4 py-2 text-left text-xs text-gray-500 font-medium dark:text-gray-300">
+                      使用时间
+                    </th>
                     <th class="px-4 py-2 text-right text-xs text-gray-500 font-medium dark:text-gray-300">
                       操作
                     </th>
@@ -935,6 +1007,12 @@ onMounted(() => {
                     <td class="whitespace-nowrap px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
                       {{ card.usedBy || '-' }}
                     </td>
+                    <td class="whitespace-nowrap px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+                      {{ card.createdAt ? new Date(card.createdAt).toLocaleString() : '-' }}
+                    </td>
+                    <td class="whitespace-nowrap px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+                      {{ card.usedAt ? new Date(card.usedAt).toLocaleString() : '-' }}
+                    </td>
                     <td class="whitespace-nowrap px-4 py-2 text-right text-sm">
                       <button class="mr-2 hover:opacity-80" style="color: var(--theme-primary);" @click="copyCode(card.code)">
                         复制
@@ -948,7 +1026,7 @@ onMounted(() => {
                     </td>
                   </tr>
                   <tr v-if="filteredCards.length === 0">
-                    <td colspan="7" class="px-4 py-4 text-center text-gray-500 dark:text-gray-400">
+                    <td colspan="9" class="px-4 py-4 text-center text-gray-500 dark:text-gray-400">
                       暂无卡密
                     </td>
                   </tr>
@@ -1397,7 +1475,7 @@ onMounted(() => {
                   v-model="localSystemConfig.clientVersion"
                   label="客户端版本"
                   type="text"
-                  placeholder="1.7.0.6_20260313"
+                  placeholder="1.7.0.7_20260313"
                   class="col-span-2"
                 />
                 <div class="flex flex-col gap-1.5">
@@ -1493,7 +1571,7 @@ onMounted(() => {
                   v-model="localWxConfig.proxyApiUrl"
                   label="代理API地址"
                   type="text"
-                  placeholder="https://api.aineishe.com/api/wxnc"
+                  placeholder="http://127.0.0.1:8059/api"
                   class="col-span-2"
                 />
                 <BaseSwitch

@@ -17,7 +17,7 @@ const {
 } = require('../models/store');
 const { sendMsgAsync, getUserState, networkEvents } = require('../utils/network');
 const { types } = require('../utils/proto');
-const { toLong, toNum, toTimeSec, getServerTimeSec, log, logWarn, sleep } = require('../utils/utils');
+const { toLong, toNum, toTimeSec, getServerTimeSec, log, logWarn, sleep, randomDelay } = require('../utils/utils');
 const { getCurrentPhase, setOperationLimitsCallback, buildLandMap, getDisplayLandContext, isOccupiedSlaveLand } = require('./farm');
 const { getInteractRecords } = require('./interact');
 const { createScheduler } = require('./scheduler');
@@ -390,7 +390,7 @@ async function fetchQqFriendsByKnownGids() {
             });
         }
         if (i + QQ_FRIEND_LIST_BATCH_SIZE < knownGids.length) {
-            await sleep(100);
+            await randomDelay(500, 1000);
         }
     }
 
@@ -709,8 +709,11 @@ async function putPlantItems(friendGid, landIds, RequestType, ReplyType, method)
             }
             // 记录其他错误
             log('好友', `放虫/放草失败: landId=${landId}, 错误: ${e.message}`, { module: 'friend', event: '放虫放草失败', landId, error: e.message });
+            await randomDelay(2000, 3500);
         }
-        await sleep(100);
+        if (ok > 0) {
+            await randomDelay(2000, 3500);
+        }
     }
     return ok;
 }
@@ -732,7 +735,9 @@ async function putPlantItemsDetailed(friendGid, landIds, RequestType, ReplyType,
         } catch (e) {
             failed.push({ landId, reason: e && e.message ? e.message : '未知错误' });
         }
-        await sleep(100);
+        if (ok > 0) {
+            await randomDelay(2000, 3500);
+        }
     }
     return { ok, failed };
 }
@@ -1257,6 +1262,7 @@ async function visitFriend(friend, totalActions, myGid, accountId) {
                         actions.push(`${op.name}${count}`);
                         totalActions[op.key] += count;
                         recordOperation(op.record, count);
+                        await randomDelay(500, 800);
                     }
                 }
             }
@@ -1290,7 +1296,7 @@ async function visitFriend(friend, totalActions, myGid, accountId) {
                         const info = status.stealableInfo.find(x => x.landId === landId);
                         if (info) stolenPlants.push(info.name);
                     } catch { /* ignore */ }
-                    await sleep(100);
+                    await randomDelay(500, 800);
                 }
             }
 
@@ -1299,6 +1305,7 @@ async function visitFriend(friend, totalActions, myGid, accountId) {
                 actions.push(`偷${ok}${plantNames ? `(${  plantNames  })` : ''}`);
                 totalActions.steal += ok;
                 recordOperation('steal', ok);
+                await randomDelay(500, 800);
             }
         }
     }
@@ -1315,6 +1322,7 @@ async function visitFriend(friend, totalActions, myGid, accountId) {
             const toProcess = status.canPutBug.slice(0, remaining);
             const ok = await putInsects(gid, toProcess);
             if (ok > 0) { actions.push(`放虫${ok}`); totalActions.putBug += ok; }
+            await randomDelay(2000, 3500);
         }
     
         if (status.canPutWeed.length > 0 && weedCheck.canOperate) {
@@ -1322,6 +1330,7 @@ async function visitFriend(friend, totalActions, myGid, accountId) {
             const toProcess = status.canPutWeed.slice(0, remaining);
             const ok = await putWeeds(gid, toProcess);
             if (ok > 0) { actions.push(`放草${ok}`); totalActions.putWeed += ok; }
+            await randomDelay(2000, 3500);
         }
     }
 
@@ -1415,7 +1424,7 @@ async function visitFriendForSteal(friend, totalActions, myGid, accountId) {
                         const info = status.stealableInfo.find(x => x.landId === landId);
                         if (info) stolenPlants.push(info.name);
                     } catch { /* ignore */ }
-                    await sleep(100);
+                    await randomDelay(500, 800);
                 }
             }
 
@@ -1424,6 +1433,7 @@ async function visitFriendForSteal(friend, totalActions, myGid, accountId) {
                 actions.push(`偷${ok}${plantNames ? `(${plantNames})` : ''}`);
                 totalActions.steal += ok;
                 recordOperation('steal', ok);
+                await randomDelay(500, 800);
             }
         }
     }
@@ -1493,6 +1503,7 @@ async function visitFriendForHelp(friend, totalActions, myGid, accountId, ignore
                     actions.push(`${op.name}${count}`);
                     totalActions[op.key] += count;
                     recordOperation(op.record, count);
+                    await randomDelay(500, 800);
                 }
             }
         }
@@ -1599,7 +1610,7 @@ async function checkFriends(options = {}) {
                 } catch {
                     // 单个好友失败不影响整体
                 }
-                await sleep(200);
+                await randomDelay(500, 800);
             }
         }
 
@@ -1637,7 +1648,7 @@ async function checkFriends(options = {}) {
                 } catch (e) {
                     log('好友', `批量帮助第 ${i + 1} 个好友失败: ${friend.name}, 错误: ${e.message}`, { module: 'friend', event: '批量帮助失败', index: i + 1, friendName: friend.name, error: e.message });
                 }
-                await sleep(200);
+                await randomDelay(500, 800);
             }
             log('好友', '批量帮助循环结束', { module: 'friend', event: '批量帮助结束' });
         }
@@ -1696,7 +1707,7 @@ async function checkFriends(options = {}) {
                     } catch (e) {
                         // 单个好友失败不影响整体
                     }
-                    await sleep(500);
+                    await randomDelay(2000, 3500);
                 }
             }
         }
@@ -1950,7 +1961,7 @@ async function runBadOnceOnStartup() {
                 log('好友', `放虫放草失败: ${friend.name}, 错误: ${e.message}`, { module: 'friend', event: '放虫放草失败', friendName: friend.name, error: e.message });
             }
 
-            await sleep(500); // 与 V1 版本保持一致，使用 500ms 间隔
+            await randomDelay(2000, 3500);
         }
 
         badExecutedOnStartup = true;
