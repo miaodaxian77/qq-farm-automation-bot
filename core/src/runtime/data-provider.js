@@ -120,6 +120,7 @@ function createDataProvider(options) {
         doFarmOp: (accountRef, opType) => callWorkerApi(resolveAccountRefId(accountRef), 'doFarmOp', opType),
         doAnalytics: (accountRef, sortBy) => callWorkerApi(resolveAccountRefId(accountRef), 'getAnalytics', sortBy),
         buyFertilizer: (accountRef, type, count) => callWorkerApi(resolveAccountRefId(accountRef), 'buyFertilizer', type, count),
+        checkAndBuyFertilizer: (accountRef, options) => callWorkerApi(resolveAccountRefId(accountRef), 'checkAndBuyFertilizer', options),
         saveSettings: async (accountRef, payload) => {
             const accountId = resolveAccountRefId(accountRef);
             if (!accountId) {
@@ -136,8 +137,11 @@ function createDataProvider(options) {
                 stealDelaySeconds: body.stealDelaySeconds,
                 plantOrderRandom: body.plantOrderRandom,
                 plantDelaySeconds: body.plantDelaySeconds,
-                fertilizerBuyType: body.fertilizerBuyType,
-                fertilizerBuyCount: body.fertilizerBuyCount,
+                fertilizerBuyOrganicCount: body.fertilizerBuyOrganicCount,
+                fertilizerBuyOrganicThresholdHours: body.fertilizerBuyOrganicThresholdHours,
+                fertilizerBuyNormalCount: body.fertilizerBuyNormalCount,
+                fertilizerBuyNormalThresholdHours: body.fertilizerBuyNormalThresholdHours,
+                fertilizerBuyCheckIntervalMinutes: body.fertilizerBuyCheckIntervalMinutes,
                 bagSeedPriority: body.bagSeedPriority,
                 bagSeedFallbackStrategy: body.bagSeedFallbackStrategy,
             };
@@ -152,8 +156,11 @@ function createDataProvider(options) {
                 stealDelaySeconds: store.getStealDelaySeconds(accountId),
                 plantOrderRandom: store.getPlantOrderRandom(accountId),
                 plantDelaySeconds: store.getPlantDelaySeconds(accountId),
-                fertilizerBuyType: store.getFertilizerBuyType(accountId),
-                fertilizerBuyCount: store.getFertilizerBuyCount(accountId),
+                fertilizerBuyOrganicCount: store.getFertilizerBuyOrganicCount(accountId),
+                fertilizerBuyOrganicThresholdHours: store.getFertilizerBuyOrganicThresholdHours(accountId),
+                fertilizerBuyNormalCount: store.getFertilizerBuyNormalCount(accountId),
+                fertilizerBuyNormalThresholdHours: store.getFertilizerBuyNormalThresholdHours(accountId),
+                fertilizerBuyCheckIntervalMinutes: store.getFertilizerBuyCheckIntervalMinutes(accountId),
                 bagSeedPriority: store.getBagSeedPriority(accountId),
                 bagSeedFallbackStrategy: store.getBagSeedFallbackStrategy(accountId),
                 configRevision: rev,

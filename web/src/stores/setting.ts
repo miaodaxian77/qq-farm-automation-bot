@@ -64,8 +64,11 @@ export interface SettingsState {
   stealDelaySeconds: number
   plantOrderRandom: boolean
   plantDelaySeconds: number
-  fertilizerBuyType: string
-  fertilizerBuyCount: number
+  fertilizerBuyOrganicCount: number
+  fertilizerBuyOrganicThresholdHours: number
+  fertilizerBuyNormalCount: number
+  fertilizerBuyNormalThresholdHours: number
+  fertilizerBuyCheckIntervalMinutes: number
 }
 
 export const useSettingStore = defineStore('setting', () => {
@@ -90,8 +93,11 @@ export const useSettingStore = defineStore('setting', () => {
     stealDelaySeconds: 0,
     plantOrderRandom: false,
     plantDelaySeconds: 0,
-    fertilizerBuyType: 'normal',
-    fertilizerBuyCount: 10,
+    fertilizerBuyOrganicCount: 10,
+    fertilizerBuyOrganicThresholdHours: 10,
+    fertilizerBuyNormalCount: 10,
+    fertilizerBuyNormalThresholdHours: 10,
+    fertilizerBuyCheckIntervalMinutes: 30,
   })
   const loading = ref(false)
 
@@ -123,8 +129,11 @@ export const useSettingStore = defineStore('setting', () => {
         settings.value.stealDelaySeconds = d.stealDelaySeconds ?? 0
         settings.value.plantOrderRandom = d.plantOrderRandom ?? false
         settings.value.plantDelaySeconds = d.plantDelaySeconds ?? 0
-        settings.value.fertilizerBuyType = d.fertilizerBuyType ?? 'organic'
-        settings.value.fertilizerBuyCount = d.fertilizerBuyCount ?? 0
+        settings.value.fertilizerBuyOrganicCount = d.fertilizerBuyOrganicCount ?? 10
+        settings.value.fertilizerBuyOrganicThresholdHours = d.fertilizerBuyOrganicThresholdHours ?? 10
+        settings.value.fertilizerBuyNormalCount = d.fertilizerBuyNormalCount ?? 10
+        settings.value.fertilizerBuyNormalThresholdHours = d.fertilizerBuyNormalThresholdHours ?? 10
+        settings.value.fertilizerBuyCheckIntervalMinutes = d.fertilizerBuyCheckIntervalMinutes ?? 30
         settings.value.bagSeedPriority = d.bagSeedPriority ?? []
         settings.value.bagSeedFallbackStrategy = d.bagSeedFallbackStrategy ?? 'level'
       }
@@ -149,8 +158,11 @@ export const useSettingStore = defineStore('setting', () => {
         stealDelaySeconds: newSettings.stealDelaySeconds ?? 0,
         plantOrderRandom: newSettings.plantOrderRandom ?? false,
         plantDelaySeconds: newSettings.plantDelaySeconds ?? 0,
-        fertilizerBuyType: newSettings.fertilizerBuyType ?? 'organic',
-        fertilizerBuyCount: newSettings.fertilizerBuyCount ?? 0,
+        fertilizerBuyOrganicCount: newSettings.fertilizerBuyOrganicCount ?? 10,
+        fertilizerBuyOrganicThresholdHours: newSettings.fertilizerBuyOrganicThresholdHours ?? 10,
+        fertilizerBuyNormalCount: newSettings.fertilizerBuyNormalCount ?? 10,
+        fertilizerBuyNormalThresholdHours: newSettings.fertilizerBuyNormalThresholdHours ?? 10,
+        fertilizerBuyCheckIntervalMinutes: newSettings.fertilizerBuyCheckIntervalMinutes ?? 30,
       }
 
       await api.post('/api/settings/save', settingsPayload, {

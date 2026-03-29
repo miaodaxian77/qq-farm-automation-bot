@@ -566,4 +566,5 @@ module.exports = {
     getBagItems,
     getCurrentTotalsFromBag,
     getBagSeeds,
+    getContainerHoursFromBagItems,
 };

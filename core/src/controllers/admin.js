@@ -682,6 +682,39 @@ function startAdminServer(dataProvider) {
         }
     });
 
+    // API: 检测化肥容器并自动购买
+    app.post('/api/fertilizer/check-and-buy', async (req, res) => {
+        const id = getAccId(req);
+        if (!id) {
+            return res.status(400).json({ ok: false, error: 'Missing x-account-id' });
+        }
+
+        if (!checkAccountAccess(req, id)) {
+            return res.status(403).json({ ok: false, error: '无权访问此账号' });
+        }
+
+        try {
+            const buyOrganic = req.body?.buyOrganic ?? false;
+            const buyNormal = req.body?.buyNormal ?? false;
+            const organicCount = Number(req.body?.organicCount) || 0;
+            const organicThresholdHours = Number(req.body?.organicThresholdHours) || 0;
+            const normalCount = Number(req.body?.normalCount) || 0;
+            const normalThresholdHours = Number(req.body?.normalThresholdHours) || 0;
+
+            const result = await provider.checkAndBuyFertilizer(id, {
+                buyOrganic,
+                buyNormal,
+                organicCount,
+                organicThresholdHours,
+                normalCount,
+                normalThresholdHours,
+            });
+            res.json({ ok: true, ...result });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
     // API: 农田详情
     app.get('/api/lands', async (req, res) => {
         const id = getAccId(req);
@@ -1567,8 +1600,11 @@ function startAdminServer(dataProvider) {
             const stealDelaySeconds = id && (typeof store.getStealDelaySeconds === 'function') ? store.getStealDelaySeconds(id) : 0;
             const plantOrderRandom = id && (typeof store.getPlantOrderRandom === 'function') ? store.getPlantOrderRandom(id) : false;
             const plantDelaySeconds = id && (typeof store.getPlantDelaySeconds === 'function') ? store.getPlantDelaySeconds(id) : 0;
-            const fertilizerBuyType = id && (typeof store.getFertilizerBuyType === 'function') ? store.getFertilizerBuyType(id) : 'organic';
-            const fertilizerBuyCount = id && (typeof store.getFertilizerBuyCount === 'function') ? store.getFertilizerBuyCount(id) : 0;
+            const fertilizerBuyOrganicCount = id && (typeof store.getFertilizerBuyOrganicCount === 'function') ? store.getFertilizerBuyOrganicCount(id) : 0;
+            const fertilizerBuyOrganicThresholdHours = id && (typeof store.getFertilizerBuyOrganicThresholdHours === 'function') ? store.getFertilizerBuyOrganicThresholdHours(id) : 10;
+            const fertilizerBuyNormalCount = id && (typeof store.getFertilizerBuyNormalCount === 'function') ? store.getFertilizerBuyNormalCount(id) : 0;
+            const fertilizerBuyNormalThresholdHours = id && (typeof store.getFertilizerBuyNormalThresholdHours === 'function') ? store.getFertilizerBuyNormalThresholdHours(id) : 10;
+            const fertilizerBuyCheckIntervalMinutes = id && (typeof store.getFertilizerBuyCheckIntervalMinutes === 'function') ? store.getFertilizerBuyCheckIntervalMinutes(id) : 30;
             const bagSeedPriority = id && (typeof store.getBagSeedPriority === 'function') ? store.getBagSeedPriority(id) : [];
             const bagSeedFallbackStrategy = id && (typeof store.getBagSeedFallbackStrategy === 'function') ? store.getBagSeedFallbackStrategy(id) : 'level';
             const ui = store.getUI();
@@ -1576,7 +1612,7 @@ function startAdminServer(dataProvider) {
             const offlineReminder = store.getOfflineReminder && currentUser
                 ? store.getOfflineReminder(currentUser.username)
                 : { channel: 'webhook', reloginUrlMode: 'none', endpoint: '', token: '', title: '账号下线提醒', msg: '账号下线', offlineDeleteSec: 0 };
-            res.json({ ok: true, data: { intervals, strategy, preferredSeed, friendQuietHours, automation, stealDelaySeconds, plantOrderRandom, plantDelaySeconds, fertilizerBuyType, fertilizerBuyCount, bagSeedPriority, bagSeedFallbackStrategy, ui, offlineReminder } });
+            res.json({ ok: true, data: { intervals, strategy, preferredSeed, friendQuietHours, automation, stealDelaySeconds, plantOrderRandom, plantDelaySeconds, fertilizerBuyOrganicCount, fertilizerBuyOrganicThresholdHours, fertilizerBuyNormalCount, fertilizerBuyNormalThresholdHours, fertilizerBuyCheckIntervalMinutes, bagSeedPriority, bagSeedFallbackStrategy, ui, offlineReminder } });
         } catch (e) {
             res.status(500).json({ ok: false, error: e.message });
         }

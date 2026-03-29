@@ -10,11 +10,13 @@ const { toNum, log, sleep } = require('../utils/utils');
 const ORGANIC_FERTILIZER_MALL_GOODS_ID = 1002;
 const INORGANIC_FERTILIZER_MALL_GOODS_ID = 1003;
 const BUY_COOLDOWN_MS = 10 * 60 * 1000;
+const CHECK_BUY_COOLDOWN_MS = 60 * 1000;
 const MAX_ROUNDS = 100;
 const BUY_PER_ROUND = 10;
 const FREE_GIFTS_DAILY_KEY = 'mall_free_gifts';
 
 let lastBuyAt = 0;
+let lastCheckBuyAt = 0;
 let buyDoneDateKey = '';
 let buyLastSuccessAt = 0;
 let buyPausedNoGoldDateKey = '';
@@ -195,7 +197,7 @@ async function autoBuyFertilizerViaMall(type = 'organic', targetCount = 0) {
         perRound = Math.max(1, Math.min(BUY_PER_ROUND, Math.floor(ticket / singlePrice) || 1));
     }
 
-    log('商城', `准备购买化肥: goodsId=${goodsId}, 单价=${singlePrice}, 点券=${ticket}, 每轮购买=${perRound}`, {
+    log('商城', `准备购买化肥: goodsId=${goodsId}, 单价=${singlePrice}`, {
         module: 'warehouse',
         event: '购买化肥',
         goodsId,
@@ -370,9 +372,129 @@ async function buyFreeGifts(force = false) {
     }
 }
 
+async function checkAndBuyFertilizerByThreshold(type, count, thresholdHours) {
+    const { getBag, getBagItems, getContainerHoursFromBagItems } = require('./warehouse');
+    
+    if (count <= 0 || thresholdHours <= 0) {
+        return { bought: 0, message: '参数无效' };
+    }
+
+    try {
+        const bagReply = await getBag();
+        const bagItems = getBagItems(bagReply);
+        const containerHours = getContainerHoursFromBagItems(bagItems);
+        
+        const currentHours = type === 'normal' ? containerHours.normal : containerHours.organic;
+        const typeName = type === 'normal' ? '无机化肥' : '有机化肥';
+
+        log('商城', `检测${typeName}容器: 剩余 ${currentHours.toFixed(1)} 小时，阈值 ${thresholdHours} 小时`, {
+            module: 'mall',
+            event: 'check_fertilizer',
+            type,
+            currentHours,
+            thresholdHours,
+        });
+
+        if (currentHours < thresholdHours) {
+            const bought = await autoBuyFertilizer(true, type, count);
+            return { bought, currentHours, thresholdHours, needed: true };
+        }
+
+        return { bought: 0, currentHours, thresholdHours, needed: false };
+    } catch (e) {
+        log('商城', `检测化肥容器失败: ${e.message}`, {
+            module: 'mall',
+            event: 'check_fertilizer',
+            result: 'error',
+            error: e.message,
+        });
+        return { bought: 0, error: e.message };
+    }
+}
+
+async function checkAndBuyFertilizerBoth(options) {
+    const { getBag, getBagItems, getContainerHoursFromBagItems } = require('./warehouse');
+    const { sleep, randomDelay } = require('../utils/utils');
+    
+    const {
+        buyOrganic = false,
+        buyNormal = false,
+        organicCount = 0,
+        organicThresholdHours = 0,
+        normalCount = 0,
+        normalThresholdHours = 0,
+    } = options || {};
+
+    const result = {
+        organicBought: 0,
+        normalBought: 0,
+        organicCurrentHours: 0,
+        normalCurrentHours: 0,
+    };
+
+    if (!buyOrganic && !buyNormal) {
+        return result;
+    }
+
+    try {
+        const bagReply = await getBag();
+        const bagItems = getBagItems(bagReply);
+        const containerHours = getContainerHoursFromBagItems(bagItems);
+        
+        result.organicCurrentHours = containerHours.organic;
+        result.normalCurrentHours = containerHours.normal;
+
+        // 优先购买有机化肥
+        if (buyOrganic && organicCount > 0 && organicThresholdHours > 0) {
+            log('商城', `检测有机化肥容器: 剩余 ${containerHours.organic.toFixed(1)} 小时，阈值 ${organicThresholdHours} 小时`, {
+                module: 'mall',
+                event: 'check_fertilizer_organic',
+                currentHours: containerHours.organic,
+                thresholdHours: organicThresholdHours,
+            });
+
+            if (containerHours.organic < organicThresholdHours) {
+                result.organicBought = await autoBuyFertilizer(true, 'organic', organicCount);
+            }
+        }
+
+        // 如果同时购买两种化肥，添加随机延迟
+        if (buyOrganic && buyNormal && result.organicBought > 0) {
+            const delay = 1000 + Math.random() * 1000; // 1000-2000ms
+            await sleep(delay);
+        }
+
+        // 购买无机化肥
+        if (buyNormal && normalCount > 0 && normalThresholdHours > 0) {
+            log('商城', `检测无机化肥容器: 剩余 ${containerHours.normal.toFixed(1)} 小时，阈值 ${normalThresholdHours} 小时`, {
+                module: 'mall',
+                event: 'check_fertilizer_normal',
+                currentHours: containerHours.normal,
+                thresholdHours: normalThresholdHours,
+            });
+
+            if (containerHours.normal < normalThresholdHours) {
+                result.normalBought = await autoBuyFertilizer(true, 'normal', normalCount);
+            }
+        }
+
+        return result;
+    } catch (e) {
+        log('商城', `检测化肥容器失败: ${e.message}`, {
+            module: 'mall',
+            event: 'check_fertilizer',
+            result: 'error',
+            error: e.message,
+        });
+        return { ...result, error: e.message };
+    }
+}
+
 module.exports = {
     autoBuyOrganicFertilizer,
     autoBuyFertilizer,
+    checkAndBuyFertilizerByThreshold,
+    checkAndBuyFertilizerBoth,
     buyFreeGifts,
     getFertilizerBuyDailyState: () => ({
         key: 'fertilizer_buy',

@@ -3,7 +3,7 @@
  */
 
 const { CONFIG, PlantPhase, PHASE_NAMES } = require('../config/config');
-const { getPlantName, getPlantById, getSeedImageBySeedId } = require('../config/gameConfig');
+const { getPlantName, getPlantById, getSeedImageBySeedId, getPlantGrowTime } = require('../config/gameConfig');
 const { parentPort } = require('node:worker_threads');
 const {
     isAutomationOn,
@@ -1021,6 +1021,7 @@ async function getFriendLandsDetail(friendGid) {
                 : null;
             const matureBegin = maturePhase ? toTimeSec(maturePhase.begin_time) : 0;
             const matureInSec = matureBegin > nowSec ? (matureBegin - nowSec) : 0;
+            const totalGrowTime = getPlantGrowTime(plantId);
             let landStatus = 'growing';
             if (phaseVal === PlantPhase.MATURE) landStatus = plant.stealable ? 'stealable' : 'harvested';
             else if (phaseVal === PlantPhase.DEAD) landStatus = 'dead';
@@ -1037,6 +1038,7 @@ async function getFriendLandsDetail(friendGid) {
                 totalSeason,
                 level,
                 matureInSec,
+                totalGrowTime,
                 needWater: toNum(plant.dry_num) > 0,
                 needWeed: (plant.weed_owners && plant.weed_owners.length > 0),
                 needBug: (plant.insect_owners && plant.insect_owners.length > 0),

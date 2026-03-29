@@ -532,15 +532,19 @@ const localAutomationSettings = ref({
     friend_bad: false,
     friend_help_exp_limit: false,
     fertilizer_gift: false,
-    fertilizer_buy: false,
+    fertilizer_buy_organic: false,
+    fertilizer_buy_normal: false,
     fertilizer: 'normal',
     skip_own_weed_bug: false,
     fertilizer_multi_season: false,
     fertilizer_land_types: [...allFertilizerLandTypes],
     fertilizer_smart_seconds: 300,
   },
-  fertilizerBuyType: 'inorganic',
-  fertilizerBuyCount: 10,
+  fertilizerBuyOrganicCount: 10,
+  fertilizerBuyOrganicThresholdHours: 10,
+  fertilizerBuyNormalCount: 10,
+  fertilizerBuyNormalThresholdHours: 10,
+  fertilizerBuyCheckIntervalMinutes: 30,
 })
 
 const fertilizerOptions = [
@@ -549,11 +553,6 @@ const fertilizerOptions = [
   { label: '仅普通化肥', value: 'normal' },
   { label: '仅有机化肥', value: 'organic' },
   { label: '不施肥', value: 'none' },
-]
-
-const fertilizerBuyTypeOptions = [
-  { label: '有机化肥', value: 'organic' },
-  { label: '无机化肥', value: 'normal' },
 ]
 
 function syncLocalAutomationSettings() {
@@ -571,7 +570,8 @@ function syncLocalAutomationSettings() {
         friend_bad: false,
         friend_help_exp_limit: false,
         fertilizer_gift: false,
-        fertilizer_buy: false,
+        fertilizer_buy_organic: false,
+        fertilizer_buy_normal: false,
         fertilizer: 'none',
         skip_own_weed_bug: false,
         fertilizer_multi_season: false,
@@ -592,7 +592,8 @@ function syncLocalAutomationSettings() {
         friend_bad: false,
         friend_help_exp_limit: false,
         fertilizer_gift: false,
-        fertilizer_buy: false,
+        fertilizer_buy_organic: false,
+        fertilizer_buy_normal: false,
         fertilizer: 'none',
         skip_own_weed_bug: false,
         fertilizer_multi_season: false,
@@ -608,8 +609,11 @@ function syncLocalAutomationSettings() {
     if (localAutomationSettings.value.automation.fertilizer_smart_seconds === undefined) {
       localAutomationSettings.value.automation.fertilizer_smart_seconds = 300
     }
-    localAutomationSettings.value.fertilizerBuyType = settings.value.fertilizerBuyType ?? 'organic'
-    localAutomationSettings.value.fertilizerBuyCount = settings.value.fertilizerBuyCount ?? 0
+    localAutomationSettings.value.fertilizerBuyOrganicCount = settings.value.fertilizerBuyOrganicCount ?? 10
+    localAutomationSettings.value.fertilizerBuyOrganicThresholdHours = settings.value.fertilizerBuyOrganicThresholdHours ?? 10
+    localAutomationSettings.value.fertilizerBuyNormalCount = settings.value.fertilizerBuyNormalCount ?? 10
+    localAutomationSettings.value.fertilizerBuyNormalThresholdHours = settings.value.fertilizerBuyNormalThresholdHours ?? 10
+    localAutomationSettings.value.fertilizerBuyCheckIntervalMinutes = settings.value.fertilizerBuyCheckIntervalMinutes ?? 30
   }
 }
 
@@ -621,29 +625,38 @@ async function saveAutomationSettings() {
     const fullSettings = {
       ...settings.value,
       automation: localAutomationSettings.value.automation,
-      fertilizerBuyType: localAutomationSettings.value.fertilizerBuyType,
-      fertilizerBuyCount: localAutomationSettings.value.fertilizerBuyCount,
+      fertilizerBuyOrganicCount: localAutomationSettings.value.fertilizerBuyOrganicCount,
+      fertilizerBuyOrganicThresholdHours: localAutomationSettings.value.fertilizerBuyOrganicThresholdHours,
+      fertilizerBuyNormalCount: localAutomationSettings.value.fertilizerBuyNormalCount,
+      fertilizerBuyNormalThresholdHours: localAutomationSettings.value.fertilizerBuyNormalThresholdHours,
+      fertilizerBuyCheckIntervalMinutes: localAutomationSettings.value.fertilizerBuyCheckIntervalMinutes,
     }
     const res = await settingStore.saveSettings(currentAccountId.value, fullSettings)
     if (res.ok) {
       showAlert('自动控制设置已保存', 'primary')
 
-      if (localAutomationSettings.value.automation.fertilizer_buy) {
+      // 如果启用了自动购买化肥，立即检测并购买
+      if (localAutomationSettings.value.automation.fertilizer_buy_organic || localAutomationSettings.value.automation.fertilizer_buy_normal) {
         try {
-          const fertilizerType = localAutomationSettings.value.fertilizerBuyType || 'organic'
-          const fertilizerCount = localAutomationSettings.value.fertilizerBuyCount || 0
-          await api.post('/api/fertilizer/buy', {
-            type: fertilizerType,
-            count: fertilizerCount,
+          const buyRes = await api.post('/api/fertilizer/check-and-buy', {
+            buyOrganic: localAutomationSettings.value.automation.fertilizer_buy_organic,
+            buyNormal: localAutomationSettings.value.automation.fertilizer_buy_normal,
+            organicCount: localAutomationSettings.value.fertilizerBuyOrganicCount,
+            organicThresholdHours: localAutomationSettings.value.fertilizerBuyOrganicThresholdHours,
+            normalCount: localAutomationSettings.value.fertilizerBuyNormalCount,
+            normalThresholdHours: localAutomationSettings.value.fertilizerBuyNormalThresholdHours,
           }, {
             headers: { 'x-account-id': currentAccountId.value },
           })
-
-          localAutomationSettings.value.automation.fertilizer_buy = false
-          await settingStore.saveSettings(currentAccountId.value, fullSettings)
+          if (buyRes.data?.ok) {
+            const totalBought = (buyRes.data.organicBought || 0) + (buyRes.data.normalBought || 0)
+            if (totalBought > 0) {
+              showAlert(`已自动购买 ${totalBought} 个化肥`, 'primary')
+            }
+          }
         }
         catch (e) {
-          console.error('购买化肥失败', e)
+          console.error('检测购买化肥失败', e)
         }
       }
     }
@@ -1292,31 +1305,65 @@ async function handleTestOffline() {
               <BaseSwitch v-model="localAutomationSettings.automation.farm_push" label="推送触发巡田" />
               <BaseSwitch v-model="localAutomationSettings.automation.land_upgrade" label="自动升级土地" />
               <BaseSwitch v-model="localAutomationSettings.automation.fertilizer_gift" label="自动填充化肥" />
-              <BaseSwitch v-model="localAutomationSettings.automation.fertilizer_buy" label="自动购买化肥" />
-              <BaseSwitch v-model="localAutomationSettings.automation.skip_own_weed_bug" label="不除自己草虫" />
-            </div>
+            <BaseSwitch v-model="localAutomationSettings.automation.fertilizer_buy_organic" label="自动购买有机化肥" />
+            <BaseSwitch v-model="localAutomationSettings.automation.fertilizer_buy_normal" label="自动购买无机化肥" />
+            <BaseSwitch v-model="localAutomationSettings.automation.skip_own_weed_bug" label="不除自己草虫" />
+          </div>
 
-            <div v-if="localAutomationSettings.automation.fertilizer_buy" class="flex flex-wrap gap-4 rounded bg-green-50 p-3 text-sm dark:bg-green-900/20">
-              <BaseSelect
-                v-model="localAutomationSettings.fertilizerBuyType"
-                label="化肥类型"
-                :options="fertilizerBuyTypeOptions"
-              />
-              <div class="flex items-end gap-2">
+          <div v-if="localAutomationSettings.automation.fertilizer_buy_organic || localAutomationSettings.automation.fertilizer_buy_normal" class="space-y-3 rounded bg-green-50 p-3 text-sm dark:bg-green-900/20">
+            <div v-if="localAutomationSettings.automation.fertilizer_buy_organic" class="space-y-2">
+              <div class="font-medium text-green-700 dark:text-green-400">有机化肥设置</div>
+              <div class="flex flex-wrap gap-4">
                 <BaseInput
-                  v-model.number="localAutomationSettings.fertilizerBuyCount"
-                  label="购买数量 (0=不限)"
+                  v-model.number="localAutomationSettings.fertilizerBuyOrganicCount"
+                  label="购买数量"
                   type="number"
-                  min="0"
+                  min="1"
                   max="10000"
                 />
-                <span class="text-xs text-red-500 whitespace-nowrap pb-2">
-                  该功能为一次性功能，选择后点击下方保存就算购买一次
-                </span>
+                <BaseInput
+                  v-model.number="localAutomationSettings.fertilizerBuyOrganicThresholdHours"
+                  label="触发阈值 (小时)"
+                  type="number"
+                  min="1"
+                  max="990"
+                />
               </div>
             </div>
+            <div v-if="localAutomationSettings.automation.fertilizer_buy_normal" class="space-y-2">
+              <div class="font-medium text-green-700 dark:text-green-400">无机化肥设置</div>
+              <div class="flex flex-wrap gap-4">
+                <BaseInput
+                  v-model.number="localAutomationSettings.fertilizerBuyNormalCount"
+                  label="购买数量"
+                  type="number"
+                  min="1"
+                  max="10000"
+                />
+                <BaseInput
+                  v-model.number="localAutomationSettings.fertilizerBuyNormalThresholdHours"
+                  label="触发阈值 (小时)"
+                  type="number"
+                  min="1"
+                  max="990"
+                />
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-4">
+              <BaseInput
+                v-model.number="localAutomationSettings.fertilizerBuyCheckIntervalMinutes"
+                label="检测间隔 (分钟)"
+                type="number"
+                min="1"
+                max="1440"
+              />
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              系统会按照设定的检测间隔定时检测化肥容器剩余量，当低于触发阈值时自动购买。保存设置后会立即检测一次。同时开启两种化肥购买时，优先购买有机化肥。
+            </p>
+          </div>
 
-            <div v-if="localAutomationSettings.automation.friend" class="flex flex-wrap gap-4 rounded bg-blue-50 p-3 text-sm dark:bg-blue-900/20">
+          <div v-if="localAutomationSettings.automation.friend" class="flex flex-wrap gap-4 rounded bg-blue-50 p-3 text-sm dark:bg-blue-900/20">
               <BaseSwitch v-model="localAutomationSettings.automation.friend_steal" label="自动偷菜" />
               <BaseSwitch v-model="localAutomationSettings.automation.friend_help" label="自动帮忙" />
               <BaseSwitch v-model="localAutomationSettings.automation.friend_bad" label="自动捣乱" />

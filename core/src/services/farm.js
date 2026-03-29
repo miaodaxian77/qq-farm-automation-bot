@@ -5,20 +5,23 @@
 const protobuf = require('protobufjs');
 const { CONFIG, PlantPhase, PHASE_NAMES } = require('../config/config');
 const { getPlantNameBySeedId, getPlantName, getPlantExp, formatGrowTime, getPlantGrowTime, getAllSeeds, getPlantById, getPlantBySeedId, getSeedImageBySeedId } = require('../config/gameConfig');
-const { isAutomationOn, getPreferredSeed, getAutomation, getPlantingStrategy, getBagSeedPriority, getBagSeedFallbackStrategy } = require('../models/store');
+const { isAutomationOn, getPreferredSeed, getAutomation, getPlantingStrategy, getBagSeedPriority, getBagSeedFallbackStrategy, getFertilizerBuyOrganicCount, getFertilizerBuyOrganicThresholdHours, getFertilizerBuyNormalCount, getFertilizerBuyNormalThresholdHours, getFertilizerBuyCheckIntervalMinutes } = require('../models/store');
 const { sendMsgAsync, getUserState, networkEvents, getWsErrorState } = require('../utils/network');
 const { types } = require('../utils/proto');
 const { toLong, toNum, getServerTimeSec, toTimeSec, log, logWarn, sleep, randomDelay } = require('../utils/utils');
 const { getPlantRankings } = require('./analytics');
 const { createScheduler } = require('./scheduler');
 const { recordOperation } = require('./stats');
-const { getBagSeeds } = require('./warehouse');
+const { getBagSeeds, getBag, getBagItems, getContainerHoursFromBagItems } = require('./warehouse');
+const { autoBuyFertilizer, checkAndBuyFertilizerBoth } = require('./mall');
 
 // ============ 内部状态 ============
 let isCheckingFarm = false;
 let isFirstFarmCheck = true;
 let farmLoopRunning = false;
 let externalSchedulerMode = false;
+let fertilizerBuyCheckTimer = null;
+let lastFertilizerBuyCheckAt = 0;
 const farmScheduler = createScheduler('farm');
 
 // ============ 农场 API ============
@@ -367,7 +370,6 @@ async function runFertilizerByConfig(plantedLands = [], options = {}) {
     }
 
     const { skipNormal = false } = options;
-
 
     if (planted.length === 0 && fertilizerConfig !== 'organic' && fertilizerConfig !== 'both' && fertilizerConfig !== 'smart') {
         return { normal: 0, organic: 0 };
@@ -971,6 +973,7 @@ async function getLandsDetail() {
                 : null;
             const matureBegin = maturePhase ? toTimeSec(maturePhase.begin_time) : 0;
             const matureInSec = matureBegin > nowSec ? (matureBegin - nowSec) : 0;
+            const totalGrowTime = getPlantGrowTime(plantId);
 
             let landStatus = 'growing';
             if (phaseVal === PlantPhase.MATURE) landStatus = 'harvestable';
@@ -992,6 +995,7 @@ async function getLandsDetail() {
                 currentSeason,
                 totalSeason,
                 matureInSec,
+                totalGrowTime,
                 needWater,
                 needWeed,
                 needBug,
@@ -1655,6 +1659,8 @@ function startFarmCheckLoop(options = {}) {
     if (!externalSchedulerMode) {
         scheduleNextFarmCheck(2000);
     }
+    // 启动化肥自动购买检测定时器
+    startFertilizerBuyCheckTimer();
 }
 
 let lastPushTime = 0;
@@ -1679,11 +1685,76 @@ function stopFarmCheckLoop() {
     externalSchedulerMode = false;
     farmScheduler.clearAll();
     networkEvents.removeListener('landsChanged', onLandsChangedPush);
+    // 停止化肥自动购买检测定时器
+    stopFertilizerBuyCheckTimer();
 }
 
 function refreshFarmCheckLoop(delayMs = 200) {
     if (!farmLoopRunning) return;
     scheduleNextFarmCheck(delayMs);
+}
+
+// ============ 化肥自动购买定时检测 ============
+function startFertilizerBuyCheckTimer() {
+    if (fertilizerBuyCheckTimer) {
+        clearInterval(fertilizerBuyCheckTimer);
+    }
+    
+    // 立即检测一次
+    checkFertilizerBuyOnce();
+    
+    // 设置定时检测
+    const intervalMinutes = getFertilizerBuyCheckIntervalMinutes();
+    const intervalMs = intervalMinutes * 60 * 1000;
+    
+    fertilizerBuyCheckTimer = setInterval(() => {
+        checkFertilizerBuyOnce();
+    }, intervalMs);
+    
+    log('农场', `化肥自动购买检测定时器已启动，间隔 ${intervalMinutes} 分钟`, {
+        module: 'farm',
+        event: 'fertilizer_buy_timer',
+        result: 'start',
+        intervalMinutes,
+    });
+}
+
+function stopFertilizerBuyCheckTimer() {
+    if (fertilizerBuyCheckTimer) {
+        clearInterval(fertilizerBuyCheckTimer);
+        fertilizerBuyCheckTimer = null;
+    }
+    log('农场', '化肥自动购买检测定时器已停止', {
+        module: 'farm',
+        event: 'fertilizer_buy_timer',
+        result: 'stop',
+    });
+}
+
+async function checkFertilizerBuyOnce() {
+    if (!isAutomationOn('fertilizer_buy_organic') && !isAutomationOn('fertilizer_buy_normal')) {
+        return;
+    }
+    
+    try {
+        const options = {
+            buyOrganic: isAutomationOn('fertilizer_buy_organic'),
+            buyNormal: isAutomationOn('fertilizer_buy_normal'),
+            organicCount: getFertilizerBuyOrganicCount(),
+            organicThresholdHours: getFertilizerBuyOrganicThresholdHours(),
+            normalCount: getFertilizerBuyNormalCount(),
+            normalThresholdHours: getFertilizerBuyNormalThresholdHours(),
+        };
+
+        await checkAndBuyFertilizerBoth(options);
+    } catch (e) {
+        logWarn('农场', `化肥自动购买检测失败: ${e.message}`, {
+            module: 'farm',
+            event: 'fertilizer_auto_buy',
+            result: 'error',
+            error: e.message,
+        });
+    }
 }
 
 module.exports = {
