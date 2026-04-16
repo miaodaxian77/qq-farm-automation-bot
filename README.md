@@ -3,7 +3,23 @@
 - 基于[Penty-d/qq-farm-bot-ui](https://github.com/Penty-d/qq-farm-bot-ui)项目二开
 - 更新优化日志详见update.log 感谢支持，喜欢的点一个star⭐吧！
 - 默认账号密码都是admin，端口3007，请部署登录后尽快修改密码！
-# 后面准备重构一下项目，项目先归档了，偷菜啥的都修了，新功能其实都加了，但不打算放，外面吹的天花乱坠的都是走协议的，所谓的防护功能、IP切换功能、波动拟人等等你觉得高科技的都是自我安慰的，走协议横竖都是死的，就看官方封不封你罢了
+# 项目重构完毕，目前闭源，不打算放，咸鱼倒卖太严重了。后续看情况吧，更新日志见Update.log
+
+---
+
+**功能截图**
+<img src="https://free.picui.cn/free/2026/04/16/69e0ac8f55b15.png"  alt="图片失效"/>
+<img src="https://free.picui.cn/free/2026/04/16/69e0ac8f21271.png"  alt="图片失效"/>
+<img src="https://free.picui.cn/free/2026/04/16/69e0ac900b669.png"  alt="图片失效"/>
+<img src="https://free.picui.cn/free/2026/04/16/69e0ac900f96f.png"  alt="图片失效"/>
+<img src="https://free.picui.cn/free/2026/04/16/69e0ac9015523.png"  alt="图片失效"/>
+<img src="https://free.picui.cn/free/2026/04/16/69e0ac91aaf20.jpg"  alt="图片失效"/>
+<img src="https://free.picui.cn/free/2026/04/16/69e0ac9226277.png"  alt="图片失效"/>
+<img src="https://free.picui.cn/free/2026/04/16/69e0ac9248b2d.jpg"  alt="图片失效"/>
+<img src="https://free.picui.cn/free/2026/04/16/69e0ad3e51321.png"  alt="图片失效"/>
+
+---
+
 ## 技术栈
 
 **后端**
@@ -26,42 +42,6 @@
 [<img src="https://skillicons.dev/icons?i=githubactions" height="48" title="GitHub Actions" />](https://github.com/features/actions)
 
 ---
-
-## 功能特性
-### 功能截图
-<img src="https://free.picui.cn/free/2026/03/27/69c638ef27e36.png"  alt="图片失效"/>
-<img src="https://free.picui.cn/free/2026/03/27/69c638eff412b.png"  alt="图片失效"/>
-<img src="https://free.picui.cn/free/2026/03/27/69c638f005734.png"  alt="图片失效"/>
-<img src="https://free.picui.cn/free/2026/03/27/69c638f02d18d.png"  alt="图片失效"/>
-
-### 多账号管理
-- 账号新增、编辑、删除、启动、停止
-- QQ只能抓包code，微信提供了可视化接口配置，自己部署协议或者找三方API，并不是内置了微信扫码登陆
-- 账号被踢下线自动删除
-- 账号连续离线超时自动删除
-- 账号离线推送通知（支持 Bark、自定义 Webhook 等）
-
-### 自动化能力
-- 农场：收获、种植、浇水、除草、除虫、铲除、土地升级
-- 仓库：收获后自动出售果实
-- 好友：自动偷菜 / 帮忙 / 捣乱
-- 任务：自动检查并领取
-- 好友黑名单：跳过指定好友
-- 静默时段：指定时间段内不执行好友操作
-
-### Web 面板
-- 概览 / 农场 / 背包 / 好友 / 分析 / 账号 / 设置页面
-- 实时日志，支持按账号、模块、事件、级别、关键词、时间范围筛选
-- 深色 / 浅色主题切换
-
-### 分析页
-支持按以下维度排序作物：
-- 经验效率 / 普通肥经验效率
-- 净利润效率 / 普通肥净利润效率
-- 等级要求
-
----
-
 ## 环境要求
 
 - 源码运行：Node.js 20+，pnpm（推荐通过 `corepack enable` 启用）
